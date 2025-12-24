@@ -49,6 +49,9 @@
     "extra": {
       "router": {
         "initialRoute": "(auth)"
+      },
+      "eas": {
+        "projectId": "8f7fad15-239b-48f3-acd3-2d25e1025a40"
       }
     }
   }

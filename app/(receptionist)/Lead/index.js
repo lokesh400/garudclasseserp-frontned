@@ -23,6 +23,8 @@ export default function AllLeads() {
   const [mobileNumber, setMobileNumber] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("ALL");
 
   const fetchLeads = async () => {
     const res = await API.get("/api/query/admin/queries/me");
@@ -33,6 +35,47 @@ export default function AllLeads() {
   useEffect(() => {
     fetchLeads();
   }, []);
+
+  const filteredLeads = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const bySearch = !q
+      ? leads
+      : leads.filter((l) => {
+          const name = String(l.studentName || "").toLowerCase();
+          const mobile = String(l.mobileNumber || "").toLowerCase();
+          const desc = String(l.description || "").toLowerCase();
+          return name.includes(q) || mobile.includes(q) || desc.includes(q);
+        });
+
+    if (dateFilter === "ALL") return bySearch;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const last7Cutoff = new Date(startOfToday);
+    last7Cutoff.setDate(last7Cutoff.getDate() - 6);
+    const last30Cutoff = new Date(startOfToday);
+    last30Cutoff.setDate(last30Cutoff.getDate() - 29);
+
+    return bySearch.filter((l) => {
+      if (!l.createdAt) return false;
+      const created = new Date(l.createdAt);
+      if (Number.isNaN(created.getTime())) return false;
+
+      if (dateFilter === "TODAY") {
+        return created >= startOfToday;
+      }
+
+      if (dateFilter === "LAST_7") {
+        return created >= last7Cutoff;
+      }
+
+      if (dateFilter === "LAST_30") {
+        return created >= last30Cutoff;
+      }
+
+      return true;
+    });
+  }, [leads, searchQuery, dateFilter]);
 
   /* ---------------- CREATE QUERY ---------------- */
 
@@ -122,10 +165,28 @@ export default function AllLeads() {
         </View>
       )}
 
+      <TextInput
+        placeholder="Search by name, mobile, or description"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        style={styles.searchInput}
+        placeholderTextColor="#7A8699"
+      />
+
+      <View style={styles.filterBar}>
+        <Filter label="All Dates" active={dateFilter === "ALL"} onPress={() => setDateFilter("ALL")} />
+        <Filter label="Today" active={dateFilter === "TODAY"} onPress={() => setDateFilter("TODAY")} />
+        <Filter label="Last 7 Days" active={dateFilter === "LAST_7"} onPress={() => setDateFilter("LAST_7")} />
+        <Filter label="Last 30 Days" active={dateFilter === "LAST_30"} onPress={() => setDateFilter("LAST_30")} />
+      </View>
+
       {/* LEADS LIST */}
       <FlatList
-        data={leads}
+        data={filteredLeads}
         keyExtractor={(item) => item._id}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>No leads found for selected filters.</Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -134,6 +195,9 @@ export default function AllLeads() {
             <Text style={styles.name}>{item.studentName}</Text>
             <Text style={styles.meta}>📞 {item.mobileNumber}</Text>
             <Text>{item.description}</Text>
+            <Text style={styles.followupDate}>
+              {new Date(item.createdAt).toLocaleString()}
+            </Text>
 
             {item.lastFollowUp && (
               <View style={styles.followupBox}>
@@ -200,6 +264,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  searchInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D5DFEA",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+
+  filterBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+
   submitBtn: {
     backgroundColor: "#16A34A",
     padding: 12,
@@ -241,4 +320,31 @@ const styles = StyleSheet.create({
 
   followupText: { fontSize: 13 },
   followupDate: { fontSize: 11, color: "#64748B" },
+  emptyText: {
+    textAlign: "center",
+    color: "#64748B",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  chip: {
+    backgroundColor: "#E5E7EB",
+    padding: 8,
+    borderRadius: 16,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  chipActive: { backgroundColor: "#2563EB" },
+  chipText: { fontSize: 13 },
+  chipTextActive: { color: "#fff" },
 });
+
+const Filter = ({ label, active, onPress }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={[styles.chip, active && styles.chipActive]}
+  >
+    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+);

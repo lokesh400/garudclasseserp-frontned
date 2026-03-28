@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
@@ -16,6 +17,8 @@ export default function AllLeads() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userFilter, setUserFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("ALL");
 
   useEffect(() => {
     API.get("/api/query/admin/queries").then((res) => {
@@ -34,11 +37,50 @@ export default function AllLeads() {
   }, [leads]);
 
   const filtered = useMemo(() => {
-    if (userFilter === "ALL") return leads;
-    return leads.filter(
-      (l) => l.createdBy?._id === userFilter
-    );
-  }, [leads, userFilter]);
+    const byUser =
+      userFilter === "ALL"
+        ? leads
+        : leads.filter((l) => l.createdBy?._id === userFilter);
+
+    const q = searchQuery.trim().toLowerCase();
+    const bySearch = !q
+      ? byUser
+      : byUser.filter((l) => {
+          const name = String(l.studentName || "").toLowerCase();
+          const mobile = String(l.mobileNumber || "").toLowerCase();
+          const desc = String(l.description || "").toLowerCase();
+          return name.includes(q) || mobile.includes(q) || desc.includes(q);
+        });
+
+    if (dateFilter === "ALL") return bySearch;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const last7Cutoff = new Date(startOfToday);
+    last7Cutoff.setDate(last7Cutoff.getDate() - 6);
+    const last30Cutoff = new Date(startOfToday);
+    last30Cutoff.setDate(last30Cutoff.getDate() - 29);
+
+    return bySearch.filter((l) => {
+      if (!l.createdAt) return false;
+      const created = new Date(l.createdAt);
+      if (Number.isNaN(created.getTime())) return false;
+
+      if (dateFilter === "TODAY") {
+        return created >= startOfToday;
+      }
+
+      if (dateFilter === "LAST_7") {
+        return created >= last7Cutoff;
+      }
+
+      if (dateFilter === "LAST_30") {
+        return created >= last30Cutoff;
+      }
+
+      return true;
+    });
+  }, [leads, userFilter, searchQuery, dateFilter]);
 
   if (loading)
     return (
@@ -58,9 +100,27 @@ export default function AllLeads() {
         ))}
       </View>
 
+      <View style={styles.filterBar}>
+        <Filter label="All Dates" active={dateFilter === "ALL"} onPress={() => setDateFilter("ALL")} />
+        <Filter label="Today" active={dateFilter === "TODAY"} onPress={() => setDateFilter("TODAY")} />
+        <Filter label="Last 7 Days" active={dateFilter === "LAST_7"} onPress={() => setDateFilter("LAST_7")} />
+        <Filter label="Last 30 Days" active={dateFilter === "LAST_30"} onPress={() => setDateFilter("LAST_30")} />
+      </View>
+
+      <TextInput
+        placeholder="Search by name, mobile, or description"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        style={styles.searchInput}
+        placeholderTextColor="#7A8699"
+      />
+
       <FlatList
         data={filtered}
         keyExtractor={(item) => item._id}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>No leads found for selected filters.</Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -132,7 +192,22 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: "#2563EB", padding: 12, borderRadius: 12 },
   addText: { color: "#fff", fontWeight: "700", textAlign: "center" },
 
-  filterBar: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  filterBar: { flexDirection: "row", flexWrap: "wrap", marginBottom: 10 },
+  searchInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D5DFEA",
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#64748B",
+    marginTop: 16,
+    fontWeight: "600",
+  },
   chip: { backgroundColor: "#E5E7EB", padding: 8, borderRadius: 16, marginRight: 6 },
   chipActive: { backgroundColor: "#2563EB" },
   chipText: { fontSize: 13 },
